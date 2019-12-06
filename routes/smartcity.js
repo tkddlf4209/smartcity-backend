@@ -5,7 +5,10 @@ var Request = require('request-promise');
 var moment = require('moment');
 var util = require('util');
 
-const elk_url = "192.168.1.130:9200"
+const ELK_URL = "192.168.1.130:9200"
+const ELK_NODE_NAME = "Et8WQxJnTJWEL-gCMvUbgw"
+
+
 const FIXED_DEVICE = 1;
 const MOVEMENT_DEVICE = 2;
 
@@ -14,6 +17,17 @@ const BATTERY_LIMIT = 20;
 const STATUS_NORMAL = 1;
 const STATUS_BORKEN = 2;
 const STATUS_BATTERY = 3;
+
+
+// search from elasticSearch
+const MODULE_TYPE_LTE = 1;
+const MODULE_TYPE_LORA = 2;
+const MODULE_TYPE_NBIOT = 3;
+
+
+const DB_TYPE_MYSQL = 1;
+const DB_TYPE_ELASTICSEARCH = 2;
+
 
 // Connection 객체 생성 
 var con = mysql.createConnection({
@@ -33,21 +47,22 @@ con.connect(function (err) {
         console.error(err);
         throw err;
     }
+
+    updateNetworkResource(con);
+    updateElkDatabaseResource(con);
+    updateMysqlDatabaseResource(con);
     setInterval(() => {
         updateNetworkResource(con);
-    }, 5000)
+        updateMysqlDatabaseResource(con);
+        updateElkDatabaseResource(con);
+    }, 5000) // 10분 단위로  저장
 });
-
-// search from elasticSearch
-const MODULE_TYPE_LTE = 1;
-const MODULE_TYPE_LORA = 2;
-const MODULE_TYPE_NBIOT = 3;
 
 var latest_total_count = 0;
 function updateNetworkResource(con) {
     options = {
         method: 'GET',
-        url: 'http://' + elk_url + '/v2-logstash-smart-sensor-*/_count',
+        url: 'http://' + ELK_URL + '/v2-logstash-smart-sensor-*/_count',
         headers:
         {
             'cache-control': 'no-cache',
@@ -55,20 +70,23 @@ function updateNetworkResource(con) {
         },
         json: true
     }
+
     Request(options, function (error, response, body) {
         if (error) throw new Error(error);
         var total_count = body.count;
-        
+
         if (latest_total_count === 0) {
             latest_total_count = total_count;
         } else {
-            if ( (total_count - latest_total_count) > 0) {
+            if ((total_count - latest_total_count) < 0) { // 데이터가 삭제되서 total count 가 줄어든 경우 다시 최근값을 초기화한다.
+                latest_total_count = total_count
+            } else {
                 var query = util.format(" INSERT INTO 5g_dashboard_module_traffic(time_stamp,module_type,add_count,total_count) values (now(),%s,%s,%s)"
                     , MODULE_TYPE_LTE, total_count - latest_total_count, total_count);
 
                 con.query(query, function (err, rows) {
                     if (err) throw err;
-                    console.log(rows);
+                    //console.log(rows);
                 });
             }
         }
@@ -76,15 +94,220 @@ function updateNetworkResource(con) {
     });
 }
 
+var elk_total_con_count = 0;
+var elk_total_transaction_count = 0;
+async function updateElkDatabaseResource(con) {
+    // get elk con count 
+    var options;
+    var total_con_count;
+    var total_transaction_count;
+    var response;
+
+    options = {
+        method: 'GET',
+        url: 'http://' + ELK_URL + '/_nodes/stats/http',
+        headers:
+        {
+            'cache-control': 'no-cache',
+            'Content-Type': 'application/json'
+        },
+        json: true
+    }
+
+    try {
+        response = await Request(options);
+        total_con_count = response.nodes[ELK_NODE_NAME].http.total_opened
+
+    } catch (e) {
+        return;
+    }
+
+    options = {
+        method: 'GET',
+        url: 'http://' + ELK_URL + '/v2-logstash-smart-sensor-*/_count',
+        headers:
+        {
+            'cache-control': 'no-cache',
+            'Content-Type': 'application/json'
+        },
+        json: true
+    }
+
+    try {
+        response = await Request(options);
+        total_transaction_count = response.count;
+    } catch (e) {
+        return;
+    }
+
+    if (elk_total_con_count == 0 || elk_total_transaction_count == 0) {
+        elk_total_con_count = total_con_count
+        elk_total_transaction_count = total_transaction_count
+    } else {
+        if ((total_transaction_count - elk_total_transaction_count) < 0 || (total_con_count - elk_total_con_count) < 0) { // 데이터가 삭제되서 total count 가 줄어든 경우 다시 최근값을 초기화한다.
+            elk_total_transaction_count = total_transaction_count
+            elk_total_con_count = total_con_count
+        } else {
+            var query = util.format(" INSERT INTO 5g_dashboard_db_info(time_stamp,db_type,increase_con_count,total_con_count,increase_transaction_count,total_transaction_count) values (now(),%s,%s,%s,%s,%s)",
+                DB_TYPE_ELASTICSEARCH,
+                total_con_count - elk_total_con_count,
+                total_con_count,
+                total_transaction_count - elk_total_transaction_count,
+                total_transaction_count);
+
+            con.query(query, function (err, rows) {
+                if (err) throw err;
+
+                elk_total_con_count = total_con_count
+                elk_total_transaction_count = total_transaction_count
+            });
+
+        }
+
+    }
+
+    // var query = util.format(" INSERT INTO 5g_dashboard_module_traffic(time_stamp,module_type,add_count,total_count) values (now(),%s,%s,%s)"
+    //                 , MODULE_TYPE_LTE, total_count - latest_total_count, total_count);
+
+    //             con.query(query, function (err, rows) {
+    //                 if (err) throw err;
+    //                 console.log(rows);
+    //             });
+}
+
+
+var mysql_total_con_count = 0;
+var mysql_total_transaction_count = 0;
+async function updateMysqlDatabaseResource(con) {
+
+    // Transcation count
+    var query = "SHOW ENGINE INNODB STATUS"
+    con.query(query, function (err, rows) {
+        if (err) throw err;
+        var temp = rows[0].Status.split('Trx id counter')[1];
+        var total_transaction_count= parseInt(temp.substring(0,temp.indexOf('\n')));
+
+        query = "show status like 'Connections'"
+        con.query(query, function (err, rows) {
+            if (err) throw err;
+            var total_con_count = parseInt(rows[0].Value);
+
+            if (mysql_total_con_count == 0 || mysql_total_transaction_count == 0) {
+                mysql_total_con_count = total_con_count
+                mysql_total_transaction_count = total_transaction_count
+            }else{
+                var query = util.format(" INSERT INTO 5g_dashboard_db_info(time_stamp,db_type,increase_con_count,total_con_count,increase_transaction_count,total_transaction_count) values (now(),%s,%s,%s,%s,%s)",
+                DB_TYPE_MYSQL,
+                total_con_count - mysql_total_con_count,
+                total_con_count,
+                total_transaction_count - mysql_total_transaction_count,
+                total_transaction_count);
+
+                con.query(query, function (err, rows) {
+                if (err) throw err;
+
+                mysql_total_con_count = total_con_count
+                mysql_total_transaction_count = total_transaction_count
+            });
+            }
+
+        });
+    });
+
+
+    
+
+}
+
+
+/* router.get('/db_info/:id', async function (req, res, next) {
+
+    var db_type;
+    if (req.params.id == 'mysql') {
+        db_type = DB_TYPE_MYSQL;
+    } else { // elk : elatic search 
+        db_type = DB_TYPE_ELASTICSEARCH;
+    }
+
+    var query = "SELECT FLOOR(UNIX_TIMESTAMP(time_stamp)/(10 * 60)) AS timekey , " +
+        " SUBSTRING(min(time_stamp),11,6) as time_stamp, " +
+        " sum(increase_con_count) as increase_con_count, " +
+        "max(db_type) as db_type, " +
+        " max(total_con_count) as total_con_count, " +
+        "sum(increase_transaction_count) as increase_transaction_count, " +
+        "max(total_transaction_count) as total_transaction_count " +
+        "FROM 5g_dashboard_db_info where db_type="+db_type +" group by timekey, db_type order by timekey desc limit 60 "
+
+    con.query(query, function (err, rows) {
+        if (err) throw err;
+        res.json(rows.reverse());
+    });
+}); */
+
 
 router.get('/module_traffic', async function (req, res, next) {
-    var query = "SELECT date_format(time_stamp, '%H:%i') as time_stamp , sum(add_count) as add_count, max(total_count) as total_count  FROM 5g_dashboard_module_traffic group by  date_format(time_stamp, '%H:%i')  order by time_stamp limit 30"
-    con.query(query, function (err, rows) {
 
+
+    var query_builder = "";
+    for (var i = 30; i >= 0; i--) {
+        query_builder += " SELECT CONCAT(LEFT(DATE_FORMAT(DATE_ADD(NOW(), INTERVAL " + (i * - 10) + " MINUTE), '%H:%i'),4),'0') AS time_stamp FROM DUAL ";
+
+        if (i != 0) {
+            query_builder += " UNION ALL ";
+        }
+    }
+    var query = util.format(
+        " SELECT TT.*, IFNULL(add_count,0) add_count, IFNULL(total_count,0) total_count from ( " +
+        " %s " +
+        ") TT LEFT JOIN (" +
+        " SELECT CONCAT(LEFT(DATE_FORMAT(time_stamp, '%H:%i'),4),'0') time_stamp,  sum(add_count) as add_count, max(total_count) as total_count FROM 5g_dashboard_module_traffic GROUP BY CONCAT(LEFT(DATE_FORMAT(time_stamp, '%H:%i'),4),'0') " +
+        ") DMT ON TT.time_stamp = DMT.time_stamp", 
+        query_builder
+    )
+
+    console.log(query);
+    
+
+    //SELECT date_format(time_stamp, '%H:%i') as time_stamp , sum(add_count) as add_count, max(total_count) as total_count  FROM 5g_dashboard_module_traffic group by  date_format(time_stamp, '%H:%i')  order by time_stamp limit 30;
+    //var query = "SELECT FLOOR(UNIX_TIMESTAMP(time_stamp)/(10 * 60)) AS timekey ,  SUBSTRING(min(time_stamp),11,6) as time_stamp, sum(add_count) as add_count, max(total_count) as total_count  FROM 5g_dashboard_module_traffic group by  timekey order by timekey desc limit 30"
+    con.query(query, function (err, rows) {
         if (err) throw err;
         res.json(rows);
     });
 
+});
+
+router.get('/db_info/:id', async function (req, res, next) {
+
+    var db_type;
+    if (req.params.id == 'mysql') {
+        db_type = DB_TYPE_MYSQL;
+    } else { // elk : elatic search 
+        db_type = DB_TYPE_ELASTICSEARCH;
+    }
+
+
+    var query_builder = "";
+    for (var i = 30; i >= 0; i--) {
+        query_builder += " SELECT CONCAT(LEFT(DATE_FORMAT(DATE_ADD(NOW(), INTERVAL " + (i * - 10) + " MINUTE), '%H:%i'),4),'0') AS time_stamp FROM DUAL ";
+
+        if (i != 0) {
+            query_builder += " UNION ALL ";
+        }
+    }
+
+    var query = util.format("SELECT TT.*, IFNULL(increase_con_count,0) increase_con_count, IFNULL(total_con_count,0) total_con_count, IFNULL(increase_transaction_count,0) increase_transaction_count, IFNULL(total_transaction_count,0) total_transaction_count FROM (" +
+        "%s " +
+        ") TT LEFT JOIN (" +
+        "  SELECT CONCAT(LEFT(DATE_FORMAT(time_stamp, '%H:%i'),4),'0') time_stamp, SUM(increase_con_count) increase_con_count, MAX(total_con_count) total_con_count, SUM(increase_transaction_count) increase_transaction_count, MAX(total_transaction_count) total_transaction_count FROM 5g_dashboard_db_info where" +
+        " db_type='" + db_type + "' " +
+        " GROUP BY CONCAT(LEFT(DATE_FORMAT(time_stamp, '%H:%i'),4),'0')" +
+        ") DDI ON TT.time_stamp = DDI.time_stamp", query_builder);
+
+    con.query(query, function (err, rows) {
+        if (err) throw err;
+        res.json(rows);
+    });
 });
 
 
@@ -95,7 +318,7 @@ router.get('/device_list', async function (req, res, next) {
 
     options = {
         method: 'POST',
-        url: "http://" + elk_url + "/v2-smart-city-sensor-list/_search?pretty",
+        url: "http://" + ELK_URL + "/v2-smart-city-sensor-list/_search?pretty",
         qs: { pretty: '' },
         headers:
         {
@@ -120,7 +343,7 @@ router.get('/device_list', async function (req, res, next) {
 
     options = {
         method: 'POST',
-        url: 'http://' + elk_url + '/v2-logstash-smart-sensor-*/_search?pretty',
+        url: 'http://' + ELK_URL + '/v2-logstash-smart-sensor-*/_search?pretty',
         qs: { pretty: '' },
         headers:
         {
@@ -221,18 +444,18 @@ function getRandomInt() {
 
 
 
-router.get('/db_info/:id', function (req, res, next) {
-    console.log('test', req.params.id);
+// router.get('/db_info/:id', function (req, res, next) {
+//     console.log('test', req.params.id);
 
-    if (req.params.id == 'mysql') {
-        con.query('SELECT * FROM smartcity.base_bike_info', function (err, rows) {
-            if (err) throw err;
-            res.send(rows);
-        });
-    } else if (req.params.id == 'elastic_search') {
+//     if (req.params.id == 'mysql') {
+//         con.query('SELECT * FROM smartcity.base_bike_info', function (err, rows) {
+//             if (err) throw err;
+//             res.send(rows);
+//         });
+//     } else if (req.params.id == 'elastic_search') {
 
-    }
-})
+//     }
+// })
 
 
 
