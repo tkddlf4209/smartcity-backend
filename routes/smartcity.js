@@ -265,7 +265,6 @@ router.get('/module_traffic', async function (req, res, next) {
         query_builder
     )
 
-    console.log(query);
     
 
     //SELECT date_format(time_stamp, '%H:%i') as time_stamp , sum(add_count) as add_count, max(total_count) as total_count  FROM 5g_dashboard_module_traffic group by  date_format(time_stamp, '%H:%i')  order by time_stamp limit 30;
