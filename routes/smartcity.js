@@ -284,7 +284,7 @@ router.get('/db_info/:id', async function (req, res, next) {
         "  SELECT CONCAT(LEFT(DATE_FORMAT(time_stamp, '%H:%i'),4),'0') time_stamp, SUM(increase_con_count) increase_con_count, MAX(total_con_count) total_con_count, SUM(increase_transaction_count) increase_transaction_count, MAX(total_transaction_count) total_transaction_count FROM 5g_dashboard_db_info where" +
         " db_type='" + db_type + "' " +
         " GROUP BY CONCAT(LEFT(DATE_FORMAT(time_stamp, '%H:%i'),4),'0')" +
-        ") DDI ON TT.time_stamp = DDI.time_stamp", query_builder);
+        ") DDI ON TT.time_stamp = DDI.time_stamp order by TT.time_stamp", query_builder);
 
     con.query(query, function (err, rows) {
         if (err) throw err;
