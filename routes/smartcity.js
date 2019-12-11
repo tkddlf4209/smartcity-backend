@@ -48,14 +48,14 @@ con.connect(function (err) {
         throw err;
     }
 
-    updateNetworkResource(con);
-    updateElkDatabaseResource(con);
-    updateMysqlDatabaseResource(con);
-    setInterval(() => {
-        updateNetworkResource(con);
-        updateMysqlDatabaseResource(con);
-        updateElkDatabaseResource(con);
-    }, 10000) // 10분 단위로  저장
+    // updateNetworkResource(con);
+    // updateElkDatabaseResource(con);
+    // updateMysqlDatabaseResource(con);
+    // setInterval(() => {
+    //     updateNetworkResource(con);
+    //     updateMysqlDatabaseResource(con);
+    //     updateElkDatabaseResource(con);
+    // }, 10000) // 10분 단위로  저장
 });
 
 var latest_total_count = 0;
