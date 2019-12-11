@@ -55,7 +55,7 @@ con.connect(function (err) {
         updateNetworkResource(con);
         updateMysqlDatabaseResource(con);
         updateElkDatabaseResource(con);
-    }, 5000) // 10분 단위로  저장
+    }, 10000) // 10분 단위로  저장
 });
 
 var latest_total_count = 0;
@@ -105,7 +105,7 @@ async function updateElkDatabaseResource(con) {
 
     options = {
         method: 'GET',
-        url: 'http://' + ELK_URL + '/_nodes/stats/http',
+        url: 'http://' + ELK_URL + '/_nodes/stats',
         headers:
         {
             'cache-control': 'no-cache',
@@ -116,26 +116,9 @@ async function updateElkDatabaseResource(con) {
 
     try {
         response = await Request(options);
-        total_con_count = response.nodes[ELK_NODE_NAME].http.total_opened
+        total_con_count = response.nodes[ELK_NODE_NAME].http.total_opened;
+        total_transaction_count = response.nodes[ELK_NODE_NAME].indices.search.query_total;
 
-    } catch (e) {
-        return;
-    }
-
-    options = {
-        method: 'GET',
-        url: 'http://' + ELK_URL + '/v2-logstash-smart-sensor-*/_count',
-        headers:
-        {
-            'cache-control': 'no-cache',
-            'Content-Type': 'application/json'
-        },
-        json: true
-    }
-
-    try {
-        response = await Request(options);
-        total_transaction_count = response.count;
     } catch (e) {
         return;
     }
