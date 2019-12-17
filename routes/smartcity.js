@@ -55,7 +55,7 @@ const pool = mysql.createPool({
 });
 
 module.exports = router;
-pool.getConnection(function (err, con) {
+/* pool.getConnection(function (err, con) {
     if (err){
         console.error(err);
         return;
@@ -83,7 +83,7 @@ pool.getConnection(function (err, con) {
         })
     }, 10000)
 
-})
+}) */
 
 
 var latest_total_count = 0;
