@@ -1,9 +1,10 @@
 var express = require('express');
-var mysql = require('mysql');
+//var mysql = require('mysql2/promise');
 var router = express.Router();
 var Request = require('request-promise');
 var moment = require('moment');
 var util = require('util');
+
 
 const ELK_URL = "192.168.1.130:9200"
 const ELK_NODE_NAME = "Et8WQxJnTJWEL-gCMvUbgw"
@@ -30,33 +31,60 @@ const DB_TYPE_ELASTICSEARCH = 2;
 
 
 // Connection 객체 생성 
-var con = mysql.createConnection({
+/* var con = mysql.createConnection({
     host: '118.131.116.84',
     port: 33306,
     user: 'smartcity',
     password: '*smartcity*',
     database: 'smartcity'
+}); */
+
+// get the client
+const mysql = require('mysql2');
+
+// Create the connection pool. The pool-specific settings are the defaults
+const pool = mysql.createPool({
+    host: '118.131.116.84',
+    port: 33306,
+    user: 'smartcity',
+    password: '*smartcity*',
+    database: 'smartcity',
+    waitForConnections: true,
+    connectionLimit: 100,
+    queueLimit: 0
 });
 
 module.exports = router;
-
-// Connect
-con.connect(function (err) {
-    if (err) {
-        console.error('mysql connection error');
+pool.getConnection(function (err, con) {
+    if (err){
         console.error(err);
-        throw err;
-    }
+        return;
+    } 
 
-    // updateNetworkResource(con);
-    // updateElkDatabaseResource(con);
-    // updateMysqlDatabaseResource(con);
-    // setInterval(() => {
-    //     updateNetworkResource(con);
-    //     updateMysqlDatabaseResource(con);
-    //     updateElkDatabaseResource(con);
-    // }, 10000) // 10분 단위로  저장
-});
+
+    updateNetworkResource(con);
+    updateElkDatabaseResource(con);
+    updateMysqlDatabaseResource(con);
+    pool.releaseConnection(con);
+
+    setInterval(() => {
+
+        pool.getConnection(function (err, conn) {
+            if (err){
+                console.error(err);
+                return;
+            } 
+
+            updateNetworkResource(conn);
+            updateMysqlDatabaseResource(conn);
+            updateElkDatabaseResource(conn);
+            pool.releaseConnection(conn);
+
+        })
+    }, 10000)
+
+})
+
 
 var latest_total_count = 0;
 function updateNetworkResource(con) {
@@ -84,8 +112,12 @@ function updateNetworkResource(con) {
                 var query = util.format(" INSERT INTO 5g_dashboard_module_traffic(time_stamp,module_type,add_count,total_count) values (now(),%s,%s,%s)"
                     , MODULE_TYPE_LTE, total_count - latest_total_count, total_count);
 
-                con.query(query, function (err, rows) {
-                    if (err) throw err;
+                pool.query(query, function (err, rows) {
+                    if (err){
+                        console.error(err);
+                        return;
+                    } 
+    
                     //console.log(rows);
                 });
             }
@@ -138,8 +170,11 @@ async function updateElkDatabaseResource(con) {
                 total_transaction_count - elk_total_transaction_count,
                 total_transaction_count);
 
-            con.query(query, function (err, rows) {
-                if (err) throw err;
+            pool.query(query, function (err, rows) {
+                if (err){
+                    console.error(err);
+                    return;
+                } 
 
                 elk_total_con_count = total_con_count
                 elk_total_transaction_count = total_transaction_count
@@ -165,40 +200,52 @@ async function updateMysqlDatabaseResource(con) {
 
     // Transcation count
     var query = "SHOW ENGINE INNODB STATUS"
-    con.query(query, function (err, rows) {
-        if (err) throw err;
+    pool.query(query, function (err, rows) {
+        if (err){
+            console.error(err);
+            return;
+        } 
+
         var temp = rows[0].Status.split('Trx id counter')[1];
-        var total_transaction_count= parseInt(temp.substring(0,temp.indexOf('\n')));
+        var total_transaction_count = parseInt(temp.substring(0, temp.indexOf('\n')));
 
         query = "show status like 'Connections'"
-        con.query(query, function (err, rows) {
-            if (err) throw err;
+        pool.query(query, function (err, rows) {
+            if (err){
+                console.error(err);
+                return;
+            } 
+
             var total_con_count = parseInt(rows[0].Value);
 
             if (mysql_total_con_count == 0 || mysql_total_transaction_count == 0) {
                 mysql_total_con_count = total_con_count
                 mysql_total_transaction_count = total_transaction_count
-            }else{
+            } else {
                 var query = util.format(" INSERT INTO 5g_dashboard_db_info(time_stamp,db_type,increase_con_count,total_con_count,increase_transaction_count,total_transaction_count) values (now(),%s,%s,%s,%s,%s)",
-                DB_TYPE_MYSQL,
-                total_con_count - mysql_total_con_count,
-                total_con_count,
-                total_transaction_count - mysql_total_transaction_count,
-                total_transaction_count);
+                    DB_TYPE_MYSQL,
+                    total_con_count - mysql_total_con_count,
+                    total_con_count,
+                    total_transaction_count - mysql_total_transaction_count,
+                    total_transaction_count);
 
-                con.query(query, function (err, rows) {
-                if (err) throw err;
+                pool.query(query, function (err, rows) {
+                    if (err){
+                        console.error(err);
+                        return;
+                    } 
+    
 
-                mysql_total_con_count = total_con_count
-                mysql_total_transaction_count = total_transaction_count
-            });
+                    mysql_total_con_count = total_con_count
+                    mysql_total_transaction_count = total_transaction_count
+                });
             }
 
         });
     });
 
 
-    
+
 
 }
 
@@ -244,16 +291,20 @@ router.get('/module_traffic', async function (req, res, next) {
         " %s " +
         ") TT LEFT JOIN (" +
         " SELECT CONCAT(LEFT(DATE_FORMAT(time_stamp, '%H:%i'),4),'0') time_stamp,  sum(add_count) as add_count, max(total_count) as total_count FROM 5g_dashboard_module_traffic GROUP BY CONCAT(LEFT(DATE_FORMAT(time_stamp, '%H:%i'),4),'0') " +
-        ") DMT ON TT.time_stamp = DMT.time_stamp", 
+        ") DMT ON TT.time_stamp = DMT.time_stamp",
         query_builder
     )
 
-    
+
 
     //SELECT date_format(time_stamp, '%H:%i') as time_stamp , sum(add_count) as add_count, max(total_count) as total_count  FROM 5g_dashboard_module_traffic group by  date_format(time_stamp, '%H:%i')  order by time_stamp limit 30;
     //var query = "SELECT FLOOR(UNIX_TIMESTAMP(time_stamp)/(10 * 60)) AS timekey ,  SUBSTRING(min(time_stamp),11,6) as time_stamp, sum(add_count) as add_count, max(total_count) as total_count  FROM 5g_dashboard_module_traffic group by  timekey order by timekey desc limit 30"
-    con.query(query, function (err, rows) {
-        if (err) throw err;
+    pool.query(query, function (err, rows) {
+        if (err){
+            console.error(err);
+            return;
+        } 
+
         res.json(rows);
     });
 
@@ -286,8 +337,12 @@ router.get('/db_info/:id', async function (req, res, next) {
         " GROUP BY CONCAT(LEFT(DATE_FORMAT(time_stamp, '%H:%i'),4),'0')" +
         ") DDI ON TT.time_stamp = DDI.time_stamp order by TT.time_stamp", query_builder);
 
-    con.query(query, function (err, rows) {
-        if (err) throw err;
+    pool.query(query, function (err, rows) {
+        if (err){
+            console.error(err);
+            return;
+        } 
+
         res.json(rows);
     });
 });
@@ -351,7 +406,11 @@ router.get('/device_list', async function (req, res, next) {
     };
 
     Request(options, function (error, response, body) {
-        if (error) throw new Error(error);
+        if (error){
+            console.error(error);
+            return;
+        } 
+
         var bike_list = [];
         body.aggregations.get_tags.buckets.forEach(buckets => {
 
