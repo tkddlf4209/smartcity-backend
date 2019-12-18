@@ -54,35 +54,35 @@ const pool = mysql.createPool({
 });
 
 module.exports = router;
-// pool.getConnection(function (err, con) {
-//     if (err){
-//         console.error(err);
-//         return;
-//     } 
+pool.getConnection(function (err, con) {
+    if (err){
+        console.error(err);
+        return;
+    } 
 
 
-//     updateNetworkResource(con);
-//     updateElkDatabaseResource(con);
-//     updateMysqlDatabaseResource(con);
-//     pool.releaseConnection(con);
+    updateNetworkResource(con);
+    updateElkDatabaseResource(con);
+    updateMysqlDatabaseResource(con);
+    pool.releaseConnection(con);
 
-//     setInterval(() => {
+    setInterval(() => {
 
-//         pool.getConnection(function (err, conn) {
-//             if (err){
-//                 console.error(err);
-//                 return;
-//             } 
+        pool.getConnection(function (err, conn) {
+            if (err){
+                console.error(err);
+                return;
+            } 
 
-//             updateNetworkResource(conn);
-//             updateMysqlDatabaseResource(conn);
-//             updateElkDatabaseResource(conn);
-//             pool.releaseConnection(conn);
+            updateNetworkResource(conn);
+            updateMysqlDatabaseResource(conn);
+            updateElkDatabaseResource(conn);
+            pool.releaseConnection(conn);
 
-//         })
-//     }, 10000)
+        })
+    }, 10000)
 
-// })
+})
 
 
 var latest_total_count = 0;
