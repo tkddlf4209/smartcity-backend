@@ -1,46 +1,45 @@
-var express = require('express');
+var express = require('express'); // web server
 //var mysql = require('mysql2/promise');
 var router = express.Router();
-var Request = require('request-promise');
-var moment = require('moment');
-var util = require('util');
+var Request = require('request-promise'); // rest api
+var moment = require('moment'); // date format
+var util = require('util');  // string format
+const mysql = require('mysql2'); // mysql con driver , Mysql2 can use Connection Pool.
 
 
+
+// ElasticSearch Address
 const ELK_URL = "192.168.1.130:9200"
 const ELK_NODE_NAME = "Et8WQxJnTJWEL-gCMvUbgw"
 
 
-const FIXED_DEVICE = 1;
-const MOVEMENT_DEVICE = 2;
-
+// TYPE CHECK STANDARD
+// 수신불량 판단 기준 (30분)
 const TIME_LIMIT = 1000 * 60 * 30;
+// 배터리부족 판단 기준 (20%이하) 
 const BATTERY_LIMIT = 20;
+
+
+// 1 고정형 , 2 이동형
+const TYPE_FIXED = 1;
+const TYPE_MOVEMENT = 2;
+
+// 1 정상 , 2 수신불량 , 3 배터리부족
 const STATUS_NORMAL = 1;
 const STATUS_BORKEN = 2;
 const STATUS_BATTERY = 3;
 
 
 // search from elasticSearch
+// 1 LTE , 2 LORA , 3 NBIOT
 const MODULE_TYPE_LTE = 1;
 const MODULE_TYPE_LORA = 2;
 const MODULE_TYPE_NBIOT = 3;
 
-
+// 1: 이동공유시설물서비스 관련 DB(MySql) , 2 : 대기품질서비스 관련 DB(ElasticSearch)
 const DB_TYPE_MYSQL = 1;
 const DB_TYPE_ELASTICSEARCH = 2;
 
-
-// Connection 객체 생성 
-/* var con = mysql.createConnection({
-    host: '118.131.116.84',
-    port: 33306,
-    user: 'smartcity',
-    password: '*smartcity*',
-    database: 'smartcity'
-}); */
-
-// get the client
-const mysql = require('mysql2');
 
 // Create the connection pool. The pool-specific settings are the defaults
 const pool = mysql.createPool({
@@ -55,35 +54,35 @@ const pool = mysql.createPool({
 });
 
 module.exports = router;
-pool.getConnection(function (err, con) {
-    if (err){
-        console.error(err);
-        return;
-    } 
+// pool.getConnection(function (err, con) {
+//     if (err){
+//         console.error(err);
+//         return;
+//     } 
 
 
-    updateNetworkResource(con);
-    updateElkDatabaseResource(con);
-    updateMysqlDatabaseResource(con);
-    pool.releaseConnection(con);
+//     updateNetworkResource(con);
+//     updateElkDatabaseResource(con);
+//     updateMysqlDatabaseResource(con);
+//     pool.releaseConnection(con);
 
-    setInterval(() => {
+//     setInterval(() => {
 
-        pool.getConnection(function (err, conn) {
-            if (err){
-                console.error(err);
-                return;
-            } 
+//         pool.getConnection(function (err, conn) {
+//             if (err){
+//                 console.error(err);
+//                 return;
+//             } 
 
-            updateNetworkResource(conn);
-            updateMysqlDatabaseResource(conn);
-            updateElkDatabaseResource(conn);
-            pool.releaseConnection(conn);
+//             updateNetworkResource(conn);
+//             updateMysqlDatabaseResource(conn);
+//             updateElkDatabaseResource(conn);
+//             pool.releaseConnection(conn);
 
-        })
-    }, 10000)
+//         })
+//     }, 10000)
 
-})
+// })
 
 
 var latest_total_count = 0;
@@ -459,9 +458,9 @@ router.get('/device_list', async function (req, res, next) {
 
 function getType(bike_id) {
     if (bike_id >= 10000 && bike_id < 30000) {
-        return FIXED_DEVICE;
+        return TYPE_FIXED;
     } else {
-        return MOVEMENT_DEVICE;
+        return TYPE_MOVEMENT;
     }
 }
 
