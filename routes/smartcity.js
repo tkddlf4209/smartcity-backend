@@ -54,35 +54,35 @@ const pool = mysql.createPool({
 });
 
 module.exports = router;
-// pool.getConnection(function (err, con) {
-//     if (err){
-//         console.error(err);
-//         return;
-//     } 
+pool.getConnection(function (err, con) {
+    if (err) {
+        console.error(err);
+        return;
+    }
 
 
-//     updateNetworkResource(con);
-//     updateElkDatabaseResource(con);
-//     updateMysqlDatabaseResource(con);
-//     pool.releaseConnection(con);
+    updateNetworkResource(con);
+    updateElkDatabaseResource(con);
+    updateMysqlDatabaseResource(con);
+    pool.releaseConnection(con);
 
-//     setInterval(() => {
+    setInterval(() => {
 
-//         pool.getConnection(function (err, conn) {
-//             if (err){
-//                 console.error(err);
-//                 return;
-//             } 
+        pool.getConnection(function (err, conn) {
+            if (err) {
+                console.error(err);
+                return;
+            }
 
-//             updateNetworkResource(conn);
-//             updateMysqlDatabaseResource(conn);
-//             updateElkDatabaseResource(conn);
-//             pool.releaseConnection(conn);
+            updateNetworkResource(conn);
+            updateMysqlDatabaseResource(conn);
+            updateElkDatabaseResource(conn);
+            pool.releaseConnection(conn);
 
-//         })
-//     }, 10000)
+        })
+    }, 10000)
 
-// })
+})
 
 
 var latest_total_count = 0;
@@ -112,11 +112,11 @@ function updateNetworkResource(con) {
                     , MODULE_TYPE_LTE, total_count - latest_total_count, total_count);
 
                 pool.query(query, function (err, rows) {
-                    if (err){
+                    if (err) {
                         console.error(err);
                         return;
-                    } 
-    
+                    }
+
                     //console.log(rows);
                 });
             }
@@ -170,10 +170,10 @@ async function updateElkDatabaseResource(con) {
                 total_transaction_count);
 
             pool.query(query, function (err, rows) {
-                if (err){
+                if (err) {
                     console.error(err);
                     return;
-                } 
+                }
 
                 elk_total_con_count = total_con_count
                 elk_total_transaction_count = total_transaction_count
@@ -200,20 +200,20 @@ async function updateMysqlDatabaseResource(con) {
     // Transcation count
     var query = "SHOW ENGINE INNODB STATUS"
     pool.query(query, function (err, rows) {
-        if (err){
+        if (err) {
             console.error(err);
             return;
-        } 
+        }
 
         var temp = rows[0].Status.split('Trx id counter')[1];
         var total_transaction_count = parseInt(temp.substring(0, temp.indexOf('\n')));
 
         query = "show status like 'Connections'"
         pool.query(query, function (err, rows) {
-            if (err){
+            if (err) {
                 console.error(err);
                 return;
-            } 
+            }
 
             var total_con_count = parseInt(rows[0].Value);
 
@@ -229,11 +229,11 @@ async function updateMysqlDatabaseResource(con) {
                     total_transaction_count);
 
                 pool.query(query, function (err, rows) {
-                    if (err){
+                    if (err) {
                         console.error(err);
                         return;
-                    } 
-    
+                    }
+
 
                     mysql_total_con_count = total_con_count
                     mysql_total_transaction_count = total_transaction_count
@@ -299,10 +299,10 @@ router.get('/module_traffic', async function (req, res, next) {
     //SELECT date_format(time_stamp, '%H:%i') as time_stamp , sum(add_count) as add_count, max(total_count) as total_count  FROM 5g_dashboard_module_traffic group by  date_format(time_stamp, '%H:%i')  order by time_stamp limit 30;
     //var query = "SELECT FLOOR(UNIX_TIMESTAMP(time_stamp)/(10 * 60)) AS timekey ,  SUBSTRING(min(time_stamp),11,6) as time_stamp, sum(add_count) as add_count, max(total_count) as total_count  FROM 5g_dashboard_module_traffic group by  timekey order by timekey desc limit 30"
     pool.query(query, function (err, rows) {
-        if (err){
+        if (err) {
             console.error(err);
             return;
-        } 
+        }
 
         res.json(rows);
     });
@@ -337,10 +337,10 @@ router.get('/db_info/:id', async function (req, res, next) {
         ") DDI ON TT.time_stamp = DDI.time_stamp order by TT.time_stamp", query_builder);
 
     pool.query(query, function (err, rows) {
-        if (err){
+        if (err) {
             console.error(err);
             return;
-        } 
+        }
 
         res.json(rows);
     });
@@ -405,10 +405,10 @@ router.get('/device_list', async function (req, res, next) {
     };
 
     Request(options, function (error, response, body) {
-        if (error){
+        if (error) {
             console.error(error);
             return;
-        } 
+        }
 
         var bike_list = [];
         body.aggregations.get_tags.buckets.forEach(buckets => {
