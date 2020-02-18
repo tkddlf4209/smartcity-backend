@@ -3,13 +3,13 @@ var express = require('express'); // web server
 var router = express.Router();
 var Request = require('request-promise'); // rest api
 var moment = require('moment'); // date format
-var util = require('util');  // string format
+var fs = require('fs');
+var path = require('path');
+const util = require('util');
 const mysql = require('mysql2'); // mysql con driver , Mysql2 can use Connection Pool.
 
-
-
 // ElasticSearch Address
-const ELK_URL = "192.168.1.130:9200"
+const ELK_URL = "192.168.3.158:9200"
 const ELK_NODE_NAME = "Et8WQxJnTJWEL-gCMvUbgw"
 
 
@@ -55,6 +55,7 @@ const pool = mysql.createPool({
 
 module.exports = router;
 pool.getConnection(function (err, con) {
+
     if (err) {
         console.error(err);
         return;
@@ -80,6 +81,9 @@ pool.getConnection(function (err, con) {
             pool.releaseConnection(conn);
 
         })
+
+
+
     }, 10000)
 
 })
@@ -273,6 +277,161 @@ async function updateMysqlDatabaseResource(con) {
     });
 }); */
 
+// var Client = require('ftp');
+// var c = new Client();
+// c.connect({
+//     host: "192.168.3.199",
+//     user: "kbell",
+//     password: "kbell12!@"
+// });
+
+
+function newVersionCheck(preVersion, newVersion) {
+    var result = false;
+    var currentVersion = preVersion.split("\\.");
+    var newVersion = newVersion.split("\\.");
+    var len = 3;
+
+    //len =  (currentVersion.length > newVersion.length) ? currentVersion.length : newVersion.length;
+
+    for (var i = 0; i < len; i++) {
+        var currentNum = currentVersion[i];
+        var newNum = newVersion[i];
+
+        if (currentNum != newNum) {
+            if (currentNum < newNum) {
+                result = true;
+            } else {
+                result = false;
+            }
+            break;
+        }
+    }
+    return result;
+
+}
+
+function checkVersion(device_type, newVersion) {
+
+    let dir = fs.readdirSync(FIRMWARE_PATH + "/" + device_type);
+    var highestVersion = "0.0.0";
+    dir.forEach(file => {
+        if (path.extname(file) === ".binary") {
+            var fileVersion = file.replace(/\.[^/.]+$/, ""); //remove .binary extension
+
+            if (newVersionCheck(highestVersion, fileVersion)) {
+                highestVersion = fileVersion;
+            }
+        }
+    })
+    return newVersionCheck(highestVersion, newVersion);
+}
+
+
+let FIRMWARE_PATH = "./firmware";
+const multer = require('multer');
+var storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, FIRMWARE_PATH + "/" + req.body.device_type)
+    },
+    filename: function (req, file, cb) {
+        cb(null, req.body.version + ".binary");
+    }
+})
+var upload = multer({
+    storage: storage,
+    fileFilter: (req, file, cb) => {
+
+        var result = false;
+        if (checkVersion(req.body.device_type, req.body.version)) {
+            result = true;
+        }
+
+        req.body.result = result;
+        cb(null, result);
+    }
+})
+
+
+router.post('/firmware_upload', upload.single('binary_file'), async function (req, res, next) {
+    console.log(req.body);
+
+    if (req.body.result) {
+        res.json(true);
+    } else {
+        res.json(false);
+    }
+    //console.log(req.body.version);
+    //res.send("ok");
+});
+
+
+
+var reg = new RegExp('^d{1,2}.d{1,2}.d{1,2}$')
+router.get('/firmware_list', async function (req, res, next) {
+    //console.log( newVersionCheck('1.0.0','0.1.1'));
+
+    var list = [];
+
+    try {
+        if (req.query.device_type != undefined) {
+            let dir = fs.readdirSync(FIRMWARE_PATH + "/" + req.query.device_type);
+
+            dir.forEach(file => {
+                if (path.extname(file) === ".binary") {
+                    var version = file.replace(/\.[^/.]+$/, ""); //remove .binary extension
+
+                    let item = fs.statSync(FIRMWARE_PATH + "/" + req.query.device_type + "/" + file);
+                    item.name = file;
+                    item.version = version;
+                    list.push(item);
+                }
+            })
+        }
+
+
+        list.sort();
+        list.reverse();
+
+        res.json(list);
+    } catch (e) {
+        res.status(500).send(e)
+    }
+});
+
+router.get('/firmware_binary', async function (req, res, next) {
+
+    if (req.query.device_type != undefined && req.query.version != undefined) {
+        var filePath = FIRMWARE_PATH + "/" + req.query.device_type + "/" + req.query.version + ".binary";
+
+        if (fs.existsSync(filePath)) {
+            var text = fs.readFileSync(filePath, 'utf8');
+            console.log(text.length);
+            res.send(text);
+        } else {
+            res.status(500).send('file not exist');
+        }
+    } else {
+        res.status(500).send('device_type or version params not exist');
+    }
+
+});
+
+
+router.get('/firmware_remove', async function (req, res, next) {
+
+    var filePath = FIRMWARE_PATH + "/" + req.query.device_type + "/" + req.query.name;
+
+    try {
+        fs.unlinkSync(filePath)
+        res.json(true);
+    } catch (err) {
+        console.error(err)
+        res.json(false);
+    }
+
+});
+
 
 router.get('/module_traffic', async function (req, res, next) {
 
@@ -317,7 +476,6 @@ router.get('/db_info/:id', async function (req, res, next) {
     } else { // elk : elatic search 
         db_type = DB_TYPE_ELASTICSEARCH;
     }
-
 
     var query_builder = "";
     for (var i = 30; i >= 0; i--) {
@@ -371,7 +529,7 @@ router.get('/device_list', async function (req, res, next) {
 
         var hits = response.hits.hits;
         hits.forEach(item => {
-            map.set(item._id, item._id);
+            map.set(item._id, item);
         });
     } catch (e) {
 
@@ -412,12 +570,13 @@ router.get('/device_list', async function (req, res, next) {
 
         var bike_list = [];
         body.aggregations.get_tags.buckets.forEach(buckets => {
-
+           
             var bike_id = buckets.desc_top.hits.hits[0]._source.device_id
 
             if (bike_id >= 10000 && bike_id < 50000) {
 
                 if (map.get(bike_id + "") != null) {
+                   
                     var timestamp = buckets.desc_top.hits.hits[0]._source.time_stamp
                     var address = buckets.desc_top.hits.hits[0]._source.full_addr
                     var battery = buckets.desc_top.hits.hits[0]._source.battery
@@ -430,9 +589,16 @@ router.get('/device_list', async function (req, res, next) {
                     var lat_m = (buckets.desc_top.hits.hits[0]._source.latitude - (lat_d * 100)) / 60;
                     var lat = lat_d + lat_m;
 
-
                     var type = getType(bike_id)
                     var status = getStatus(timestamp, battery) // 1 : 정상 , 2: 데이터미수신(우선순위 높음) , 3: 배터리부족(우선순위 낮음)
+
+                    var device_type = map.get(bike_id + "")._source.device_type;
+                    
+                    var current_version = !!map.get(bike_id + "")._source.current_version?map.get(bike_id + "")._source.current_version:'1.0.0';
+                    var update_version = !!map.get(bike_id + "")._source.update_version?map.get(bike_id + "")._source.update_version:'1.0.0';
+                    var update_enable = !!map.get(bike_id + "")._source.update_enable?map.get(bike_id + "")._source.update_enable:'off';
+
+            
                     bike_list.push({
                         device_id: bike_id,
                         timestamp: moment(timestamp, 'YYYYMMDDHHmmss').format('YYYY-MM-DD HH:mm:ss'),
@@ -441,7 +607,11 @@ router.get('/device_list', async function (req, res, next) {
                         lng: lng,
                         lat: lat,
                         type: type,
-                        status: status
+                        status: status,
+                        device_type:device_type,
+                        current_version:current_version,
+                        update_version:update_version,
+                        update_enable:update_enable
                     })
                 }
 
@@ -481,6 +651,9 @@ function getRandomInt() {
     var random = Math.floor(Math.random() * (+max - +min)) + +min;
     return random;
 }
+
+
+router.get('/ssh')
 
 
 
