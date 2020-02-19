@@ -405,7 +405,7 @@ router.get('/firmware_binary', async function (req, res, next) {
         var filePath = FIRMWARE_PATH + "/" + req.query.device_type + "/" + req.query.version + ".binary";
 
         if (fs.existsSync(filePath)) {
-            var text = fs.readFileSync(filePath, 'utf8');
+            var text = fs.readFileSync(filePath);
             console.log(text.length);
             res.send(text);
         } else {
@@ -433,8 +433,86 @@ router.get('/firmware_remove', async function (req, res, next) {
 });
 
 
-router.get('/module_traffic', async function (req, res, next) {
+router.get('/device_info', async function (req, res, next) {
 
+    options = {
+        method: 'GET',
+        url: 'http://' + ELK_URL + '/v2-smart-city-sensor-list/_search',
+        headers:
+        {
+            'cache-control': 'no-cache',
+            'Content-Type': 'application/json'
+        },
+        body: {
+            "query": {
+                "bool": {
+                  "must": [
+                    {
+                      "term": {
+                        "device_id": {
+                          "value": req.query.device_id
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            
+        },
+        json: true
+    }
+
+    try {
+        response = await Request(options);
+
+
+        if(response.hits.hits.length >0){
+            res.json(response.hits.hits[0]._source)
+        }else{
+            res.send("");
+        }
+    } catch (e) {
+        console.log(e);
+    }
+});
+
+router.post('/firmware_update', async function (req, res, next) {
+  
+    //res.json(true);
+     for (var i = 0; i < req.query.device_list.length; i++) {
+        options = {
+            method: 'POST',
+            url: 'http://' + ELK_URL + '/v2-smart-city-sensor-list/info/' + JSON.parse(req.query.device_list[i]) + '/_update',
+            headers:
+            {
+                'cache-control': 'no-cache',
+                'Content-Type': 'application/json'
+            },
+            body: {
+                doc: {
+                    "update_version": req.query.version,
+                    "update_enable": req.query.firmware_enable
+                }
+            },
+            json: true
+        }
+
+        try {
+            response = await Request(options);
+
+        } catch (e) {
+            console.log(e);
+        }
+    }
+
+    setTimeout(function () {
+        // 값을 변경하는데 시간이 좀 걸리는 듯하다. 응답후 바로 장치 리스트를 재요청할 경우 값이 바로 변경되지 않았다.
+        res.json(true);
+    }, 1000);
+
+});
+
+router.get('/module_traffic', async function (req, res, next) {
 
     var query_builder = "";
     for (var i = 30; i >= 0; i--) {
@@ -452,8 +530,6 @@ router.get('/module_traffic', async function (req, res, next) {
         ") DMT ON TT.time_stamp = DMT.time_stamp",
         query_builder
     )
-
-
 
     //SELECT date_format(time_stamp, '%H:%i') as time_stamp , sum(add_count) as add_count, max(total_count) as total_count  FROM 5g_dashboard_module_traffic group by  date_format(time_stamp, '%H:%i')  order by time_stamp limit 30;
     //var query = "SELECT FLOOR(UNIX_TIMESTAMP(time_stamp)/(10 * 60)) AS timekey ,  SUBSTRING(min(time_stamp),11,6) as time_stamp, sum(add_count) as add_count, max(total_count) as total_count  FROM 5g_dashboard_module_traffic group by  timekey order by timekey desc limit 30"
@@ -570,13 +646,13 @@ router.get('/device_list', async function (req, res, next) {
 
         var bike_list = [];
         body.aggregations.get_tags.buckets.forEach(buckets => {
-           
+
             var bike_id = buckets.desc_top.hits.hits[0]._source.device_id
 
             if (bike_id >= 10000 && bike_id < 50000) {
 
                 if (map.get(bike_id + "") != null) {
-                   
+
                     var timestamp = buckets.desc_top.hits.hits[0]._source.time_stamp
                     var address = buckets.desc_top.hits.hits[0]._source.full_addr
                     var battery = buckets.desc_top.hits.hits[0]._source.battery
@@ -593,12 +669,11 @@ router.get('/device_list', async function (req, res, next) {
                     var status = getStatus(timestamp, battery) // 1 : 정상 , 2: 데이터미수신(우선순위 높음) , 3: 배터리부족(우선순위 낮음)
 
                     var device_type = map.get(bike_id + "")._source.device_type;
-                    
-                    var current_version = !!map.get(bike_id + "")._source.current_version?map.get(bike_id + "")._source.current_version:'1.0.0';
-                    var update_version = !!map.get(bike_id + "")._source.update_version?map.get(bike_id + "")._source.update_version:'1.0.0';
-                    var update_enable = !!map.get(bike_id + "")._source.update_enable?map.get(bike_id + "")._source.update_enable:'off';
 
-            
+                    var current_version = !!map.get(bike_id + "")._source.current_version ? map.get(bike_id + "")._source.current_version : '1.0.0';
+                    var update_version = !!map.get(bike_id + "")._source.update_version ? map.get(bike_id + "")._source.update_version : '1.0.0';
+                    var update_enable = !!map.get(bike_id + "")._source.update_enable ? map.get(bike_id + "")._source.update_enable : 'false';
+                    //var update_enable = true;
                     bike_list.push({
                         device_id: bike_id,
                         timestamp: moment(timestamp, 'YYYYMMDDHHmmss').format('YYYY-MM-DD HH:mm:ss'),
@@ -608,10 +683,10 @@ router.get('/device_list', async function (req, res, next) {
                         lat: lat,
                         type: type,
                         status: status,
-                        device_type:device_type,
-                        current_version:current_version,
-                        update_version:update_version,
-                        update_enable:update_enable
+                        device_type: device_type,
+                        current_version: current_version,
+                        update_version: update_version,
+                        update_enable: update_enable
                     })
                 }
 
