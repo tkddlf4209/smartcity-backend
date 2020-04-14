@@ -8,11 +8,6 @@ var path = require('path');
 const util = require('util');
 const mysql = require('mysql2'); // mysql con driver , Mysql2 can use Connection Pool.
 
-// ElasticSearch Address
-const ELK_URL = "192.168.3.158:9200"
-const ELK_NODE_NAME = "Et8WQxJnTJWEL-gCMvUbgw"
-
-
 // TYPE CHECK STANDARD
 // 수신불량 판단 기준 (30분)
 const TIME_LIMIT = 1000 * 60 * 30;
@@ -41,6 +36,11 @@ const DB_TYPE_MYSQL = 1;
 const DB_TYPE_ELASTICSEARCH = 2;
 
 
+// ElasticSearch Address
+const ELK_URL = "192.168.3.158:9200"
+const ELK_NODE_NAME = "Et8WQxJnTJWEL-gCMvUbgw"
+
+
 // Create the connection pool. The pool-specific settings are the defaults
 const pool = mysql.createPool({
     host: '118.131.116.84',
@@ -53,6 +53,8 @@ const pool = mysql.createPool({
     queueLimit: 0
 });
 
+
+
 module.exports = router;
 pool.getConnection(function (err, con) {
 
@@ -60,7 +62,6 @@ pool.getConnection(function (err, con) {
         console.error(err);
         return;
     }
-
 
     updateNetworkResource(con);
     updateElkDatabaseResource(con);
@@ -82,15 +83,15 @@ pool.getConnection(function (err, con) {
 
         })
 
-
-
     }, 10000)
 
 })
 
 
-var latest_total_count = 0;
+var latest_lte_total_count = 0;
+var latest_lora_total_count = 0;
 function updateNetworkResource(con) {
+    // lte traffic
     options = {
         method: 'GET',
         url: 'http://' + ELK_URL + '/v2-logstash-smart-sensor-*/_count',
@@ -104,29 +105,70 @@ function updateNetworkResource(con) {
 
     Request(options, function (error, response, body) {
         if (error) throw new Error(error);
-        var total_count = body.count;
+        var lte_total_count = body.count;
 
-        if (latest_total_count === 0) {
-            latest_total_count = total_count;
+        if (latest_lte_total_count === 0) {
+            latest_lte_total_count = lte_total_count;
         } else {
-            if ((total_count - latest_total_count) < 0) { // 데이터가 삭제되서 total count 가 줄어든 경우 다시 최근값을 초기화한다.
-                latest_total_count = total_count
+            if ((lte_total_count - latest_lte_total_count) < 0) { // 데이터가 삭제되서 total count 가 줄어든 경우 다시 최근값을 초기화한다.
+                latest_lte_total_count = lte_total_count
             } else {
                 var query = util.format(" INSERT INTO 5g_dashboard_module_traffic(time_stamp,module_type,add_count,total_count) values (now(),%s,%s,%s)"
-                    , MODULE_TYPE_LTE, total_count - latest_total_count, total_count);
+                    , MODULE_TYPE_LTE, lte_total_count - latest_lte_total_count, lte_total_count);
 
                 pool.query(query, function (err, rows) {
                     if (err) {
                         console.error(err);
                         return;
                     }
-
                     //console.log(rows);
                 });
             }
         }
-        latest_total_count = total_count;
+        latest_lte_total_count = lte_total_count;
     });
+
+
+    // lora traffic
+    var query = util.format(" SELECT count(*) count from lora_test");
+
+    pool.query(query, function (err, rows) {
+        if (err) {
+            console.error(err);
+            return;
+        }
+
+        if(rows.count == 0){
+            return
+        }
+        
+        var lora_total_count = rows[0].count;
+        
+        if (latest_lora_total_count === 0) {
+            latest_lora_total_count = lora_total_count;
+        } else {
+            if ((lora_total_count - latest_lora_total_count) < 0) { // 데이터가 삭제되서 total count 가 줄어든 경우 다시 최근값을 초기화한다.
+                latest_lora_total_count = lora_total_count
+            } else {
+                var query = util.format(" INSERT INTO 5g_dashboard_module_traffic(time_stamp,module_type,add_count,total_count) values (now(),%s,%s,%s)"
+                    , MODULE_TYPE_LORA, lora_total_count - latest_lora_total_count, lora_total_count);
+
+                pool.query(query, function (err, rows) {
+                    if (err) {
+                        console.error(err);
+                        return;
+                    }
+                    //console.log(rows);
+                });
+            }
+        }
+        latest_lora_total_count = lora_total_count;
+        
+
+        //console.log(rows);
+    });
+
+
 }
 
 var elk_total_con_count = 0;
@@ -314,17 +356,27 @@ function newVersionCheck(preVersion, newVersion) {
 function checkVersion(device_type, newVersion) {
 
     let dir = fs.readdirSync(FIRMWARE_PATH + "/" + device_type);
-    var highestVersion = "0.0.0";
+    var highestVersion;
     dir.forEach(file => {
         if (path.extname(file) === ".binary") {
-            var fileVersion = file.replace(/\.[^/.]+$/, ""); //remove .binary extension
+            var fileVersion = file.replace(/\.[^/.]+$/, "").replace("V", ""); //remove .binary extension
+            console.log(fileVersion);
 
-            if (newVersionCheck(highestVersion, fileVersion)) {
-                highestVersion = fileVersion;
+            if (highestVersion == undefined) {
+                highestVersion = fileVersion
+            } else {
+                if (newVersionCheck(highestVersion, fileVersion)) {
+                    highestVersion = fileVersion;
+                }
             }
         }
     })
-    return newVersionCheck(highestVersion, newVersion);
+
+    if (highestVersion == undefined) {
+        return true;
+    } else {
+        return newVersionCheck(highestVersion, newVersion);
+    }
 }
 
 
@@ -335,14 +387,14 @@ var storage = multer.diskStorage({
         cb(null, FIRMWARE_PATH + "/" + req.body.device_type)
     },
     filename: function (req, file, cb) {
-        cb(null, req.body.version + ".binary");
+        cb(null, "V" + req.body.version + ".binary");
     }
 })
 var upload = multer({
     storage: storage,
     fileFilter: (req, file, cb) => {
-
         var result = false;
+
         if (checkVersion(req.body.device_type, req.body.version)) {
             result = true;
         }
@@ -406,7 +458,7 @@ router.get('/firmware_binary', async function (req, res, next) {
 
         if (fs.existsSync(filePath)) {
             var text = fs.readFileSync(filePath);
-            console.log(text.length);
+            
             res.send(text);
         } else {
             res.status(500).send('file not exist');
@@ -416,7 +468,6 @@ router.get('/firmware_binary', async function (req, res, next) {
     }
 
 });
-
 
 router.get('/firmware_remove', async function (req, res, next) {
 
@@ -446,18 +497,18 @@ router.get('/device_info', async function (req, res, next) {
         body: {
             "query": {
                 "bool": {
-                  "must": [
-                    {
-                      "term": {
-                        "device_id": {
-                          "value": req.query.device_id
+                    "must": [
+                        {
+                            "term": {
+                                "device_id": {
+                                    "value": req.query.device_id
+                                }
+                            }
                         }
-                      }
-                    }
-                  ]
+                    ]
                 }
-              }
-            
+            }
+
         },
         json: true
     }
@@ -466,9 +517,9 @@ router.get('/device_info', async function (req, res, next) {
         response = await Request(options);
 
 
-        if(response.hits.hits.length >0){
+        if (response.hits.hits.length > 0) {
             res.json(response.hits.hits[0]._source)
-        }else{
+        } else {
             res.send("");
         }
     } catch (e) {
@@ -477,9 +528,9 @@ router.get('/device_info', async function (req, res, next) {
 });
 
 router.post('/firmware_update', async function (req, res, next) {
-  
+
     //res.json(true);
-     for (var i = 0; i < req.query.device_list.length; i++) {
+    for (var i = 0; i < req.query.device_list.length; i++) {
         options = {
             method: 'POST',
             url: 'http://' + ELK_URL + '/v2-smart-city-sensor-list/info/' + JSON.parse(req.query.device_list[i]) + '/_update',
@@ -513,7 +564,8 @@ router.post('/firmware_update', async function (req, res, next) {
 });
 
 router.get('/module_traffic', async function (req, res, next) {
-
+    var module_type =req.query.module_type ;
+    
     var query_builder = "";
     for (var i = 30; i >= 0; i--) {
         query_builder += " SELECT CONCAT(LEFT(DATE_FORMAT(DATE_ADD(NOW(), INTERVAL " + (i * - 10) + " MINUTE), '%H:%i'),4),'0') AS time_stamp FROM DUAL ";
@@ -521,12 +573,13 @@ router.get('/module_traffic', async function (req, res, next) {
         if (i != 0) {
             query_builder += " UNION ALL ";
         }
+
     }
     var query = util.format(
         " SELECT TT.*, IFNULL(add_count,0) add_count, IFNULL(total_count,0) total_count from ( " +
         " %s " +
         ") TT LEFT JOIN (" +
-        " SELECT CONCAT(LEFT(DATE_FORMAT(time_stamp, '%H:%i'),4),'0') time_stamp,  sum(add_count) as add_count, max(total_count) as total_count FROM 5g_dashboard_module_traffic GROUP BY CONCAT(LEFT(DATE_FORMAT(time_stamp, '%H:%i'),4),'0') " +
+        " SELECT CONCAT(LEFT(DATE_FORMAT(time_stamp, '%H:%i'),4),'0') time_stamp,  sum(add_count) as add_count, max(total_count) as total_count FROM 5g_dashboard_module_traffic where time_stamp > DATE_ADD(NOW(), INTERVAL -300 MINUTE) and module_type="+module_type+" GROUP BY CONCAT(LEFT(DATE_FORMAT(time_stamp, '%H:%i'),4),'0') " +
         ") DMT ON TT.time_stamp = DMT.time_stamp",
         query_builder
     )
@@ -582,6 +635,44 @@ router.get('/db_info/:id', async function (req, res, next) {
 
 
 /* GET users listing. */
+router.get('/lora_list', async function (req, res, next) {
+    var options = null;
+    var response = null;
+
+    options = {
+        method: 'POST',
+        url: "http://" + ELK_URL + "/v2-smart-city-sensor-list/_search?pretty",
+        qs: { pretty: '' },
+        headers:
+        {
+            'cache-control': 'no-cache',
+            'Content-Type': 'application/json'
+        },
+        body: { "size": 10000, "query": { "match_all": {} }, "sort": [{ "device_id": { "order": "asc" } }] },
+        json: true
+    }
+
+    var lora_list = [];
+    try {
+        response = await Request(options);
+
+        var hits = response.hits.hits;
+        
+        for(var i = 0; i < hits.length; i++){
+            if(hits[i]._id >=60000 && 70000 > hits[i]._id){
+                lora_list.push (hits[i]);
+            }
+        }
+        
+    } catch (e) {
+
+    }
+    res.json(lora_list);
+
+});
+
+
+/* GET users listing. */
 router.get('/device_list', async function (req, res, next) {
     var options = null;
     var response = null;
@@ -605,6 +696,7 @@ router.get('/device_list', async function (req, res, next) {
 
         var hits = response.hits.hits;
         hits.forEach(item => {
+            //console.log(item)
             map.set(item._id, item);
         });
     } catch (e) {
@@ -648,8 +740,8 @@ router.get('/device_list', async function (req, res, next) {
         body.aggregations.get_tags.buckets.forEach(buckets => {
 
             var bike_id = buckets.desc_top.hits.hits[0]._source.device_id
-
-            if (bike_id >= 10000 && bike_id < 50000) {
+           
+            if (bike_id >= 10000 && bike_id < 50000) { // lora 디바이스는 제외.
 
                 if (map.get(bike_id + "") != null) {
 
