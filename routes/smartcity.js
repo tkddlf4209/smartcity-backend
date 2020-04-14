@@ -53,7 +53,17 @@ const pool = mysql.createPool({
     queueLimit: 0
 });
 
-
+// const pool = mysql.createPool({
+//     host: '127.0.0.1',
+//     port: 3306,
+//     user: 'smartcity',
+//     password: '*smartcity*',
+//     database: 'smartcity',
+//     waitForConnections: true,
+//     connectionLimit: 100,
+//     queueLimit: 0
+// });
+//const ELK_URL = "10.20.1.137:9200"
 
 module.exports = router;
 pool.getConnection(function (err, con) {
