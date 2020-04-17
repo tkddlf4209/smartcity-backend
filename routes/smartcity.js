@@ -37,25 +37,11 @@ const DB_TYPE_ELASTICSEARCH = 2;
 
 
 // ElasticSearch Address
-const ELK_URL = "192.168.3.158:9200"
-const ELK_NODE_NAME = "Et8WQxJnTJWEL-gCMvUbgw"
-
-
-// Create the connection pool. The pool-specific settings are the defaults
-const pool = mysql.createPool({
-    host: '118.131.116.84',
-    port: 33306,
-    user: 'smartcity',
-    password: '*smartcity*',
-    database: 'smartcity',
-    waitForConnections: true,
-    connectionLimit: 100,
-    queueLimit: 0
-});
-
+// const ELK_URL = "192.168.3.158:9200"
+// const ELK_NODE_NAME = "Et8WQxJnTJWEL-gCMvUbgw"
 // const pool = mysql.createPool({
-//     host: '127.0.0.1',
-//     port: 3306,
+//     host: '118.131.116.84',
+//     port: 33306,
 //     user: 'smartcity',
 //     password: '*smartcity*',
 //     database: 'smartcity',
@@ -63,7 +49,19 @@ const pool = mysql.createPool({
 //     connectionLimit: 100,
 //     queueLimit: 0
 // });
-//const ELK_URL = "10.20.1.137:9200"
+
+const pool = mysql.createPool({
+    host: '127.0.0.1',
+    port: 3306,
+    user: 'smartcity',
+    password: '*smartcity*',
+    database: 'smartcity',
+    waitForConnections: true,
+    connectionLimit: 100,
+    queueLimit: 0
+});
+const ELK_URL = "10.20.1.137:9200"
+const ELK_NODE_NAME = "EliRyr5_QVeXOcA45PGqeQ"
 
 module.exports = router;
 pool.getConnection(function (err, con) {
@@ -574,7 +572,7 @@ router.post('/firmware_update', async function (req, res, next) {
 });
 
 router.get('/module_traffic', async function (req, res, next) {
-    var module_type =req.query.module_type ;
+    var module_type =req.query.module_type ; // lte , lora
     
     var query_builder = "";
     for (var i = 30; i >= 0; i--) {
