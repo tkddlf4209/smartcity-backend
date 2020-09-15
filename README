@@ -1,0 +1,42 @@
+- create talbe 
+
+CREATE TABLE `lora_test` (
+  `device_id` int(11) NOT NULL,
+  `timestamp` timestamp NULL DEFAULT NULL,
+  `devEUI` varchar(16) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `deviceName` varchar(45) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `fCnt` int(11) DEFAULT NULL,
+  `fPort` int(11) DEFAULT NULL,
+  `rssi` int(11) DEFAULT NULL,
+  `freq` int(11) DEFAULT NULL,
+  `data` varchar(256) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `longitude` double DEFAULT NULL,
+  `latitude` double DEFAULT NULL,
+  `temperature` int(11) DEFAULT NULL,
+  `humidity` int(11) DEFAULT NULL,
+  `pm10` int(11) DEFAULT NULL,
+  `pm2.5` int(11) DEFAULT NULL,
+  `pm1` int(11) DEFAULT NULL,
+  `battery` int(11) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+
+CREATE TABLE `5g_dashboard_db_info` (
+  `time_stamp` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `db_type` int(11) NOT NULL,
+  `increase_con_count` int(11) DEFAULT NULL,
+  `total_con_count` int(11) DEFAULT NULL,
+  `increase_transaction_count` int(11) DEFAULT NULL,
+  `total_transaction_count` int(11) DEFAULT NULL,
+  PRIMARY KEY (`time_stamp`,`db_type`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+
+CREATE TABLE `5g_dashboard_module_traffic` (
+  `idx` int(11) NOT NULL AUTO_INCREMENT,
+  `time_stamp` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `module_type` int(11) DEFAULT NULL,
+  `add_count` int(11) DEFAULT NULL,
+  `total_count` int(11) DEFAULT NULL,
+  PRIMARY KEY (`idx`)
+) ENGINE=InnoDB AUTO_INCREMENT=1221682 DEFAULT CHARSET=latin1;
