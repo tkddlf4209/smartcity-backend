@@ -36,37 +36,10 @@ const DB_TYPE_MYSQL = 1;
 const DB_TYPE_ELASTICSEARCH = 2;
 
 
-// ElasticSearch Address
-// const ELK_URL = "192.168.3.158:9200"
-// const ELK_NODE_NAME = "Et8WQxJnTJWEL-gCMvUbgw"
-// const pool = mysql.createPool({
-//     host: '118.131.116.84',
-//     port: 33306,
-//     user: 'smartcity',
-//     password: '*smartcity*',
-//     database: 'smartcity',
-//     waitForConnections: true,
-//     connectionLimit: 100,
-//     queueLimit: 0
-// });
-
-// const pool = mysql.createPool({
-//     host: '118.131.116.84',
-//     port: 33306,
-//     user: 'smartcity',
-//     password: '*smartcity*',
-//     database: 'smartcity',
-//     waitForConnections: true,
-//     connectionLimit: 100,
-//     queueLimit: 0
-// });
-// const ELK_URL = "192.168.3.158:9200"
-// const ELK_NODE_NAME = "Et8WQxJnTJWEL-gCMvUbgw"
-
-
+// KBELL
 const pool = mysql.createPool({
-    host: '127.0.0.1',
-    port: 3306,
+    host: '118.131.116.84',
+    port: 33306,
     user: 'smartcity',
     password: '*smartcity*',
     database: 'smartcity',
@@ -74,8 +47,22 @@ const pool = mysql.createPool({
     connectionLimit: 100,
     queueLimit: 0
 });
-const ELK_URL = "10.20.1.137:9200"
-const ELK_NODE_NAME = "EliRyr5_QVeXOcA45PGqeQ"
+const ELK_URL = "192.168.3.158:9200"
+const ELK_NODE_NAME = "Et8WQxJnTJWEL-gCMvUbgw"
+
+// DAEJON
+// const pool = mysql.createPool({
+//     host: '127.0.0.1',
+//     port: 3306,
+//     user: 'smartcity',
+//     password: '*smartcity*',
+//     database: 'smartcity',
+//     waitForConnections: true,
+//     connectionLimit: 100,
+//     queueLimit: 0
+// });
+// const ELK_URL = "10.20.1.137:9200"
+// const ELK_NODE_NAME = "EliRyr5_QVeXOcA45PGqeQ"
 
 module.exports = router;
 pool.getConnection(function (err, con) {
@@ -160,12 +147,12 @@ function updateNetworkResource(con) {
             return;
         }
 
-        if(rows.count == 0){
+        if (rows.count == 0) {
             return
         }
-        
+
         var lora_total_count = rows[0].count;
-        
+
         if (latest_lora_total_count === 0) {
             latest_lora_total_count = lora_total_count;
         } else {
@@ -185,7 +172,7 @@ function updateNetworkResource(con) {
             }
         }
         latest_lora_total_count = lora_total_count;
-        
+
 
         //console.log(rows);
     });
@@ -480,7 +467,7 @@ router.get('/firmware_binary', async function (req, res, next) {
 
         if (fs.existsSync(filePath)) {
             var text = fs.readFileSync(filePath);
-            
+
             res.send(text);
         } else {
             res.status(500).send('file not exist');
@@ -586,8 +573,8 @@ router.post('/firmware_update', async function (req, res, next) {
 });
 
 router.get('/module_traffic', async function (req, res, next) {
-    var module_type =req.query.module_type ; // lte , lora
-    
+    var module_type = req.query.module_type; // lte , lora
+
     var query_builder = "";
     for (var i = 30; i >= 0; i--) {
         query_builder += " SELECT CONCAT(LEFT(DATE_FORMAT(DATE_ADD(NOW(), INTERVAL " + (i * - 10) + " MINUTE), '%H:%i'),4),'0') AS time_stamp FROM DUAL ";
@@ -601,7 +588,7 @@ router.get('/module_traffic', async function (req, res, next) {
         " SELECT TT.*, IFNULL(add_count,0) add_count, IFNULL(total_count,0) total_count from ( " +
         " %s " +
         ") TT LEFT JOIN (" +
-        " SELECT CONCAT(LEFT(DATE_FORMAT(time_stamp, '%H:%i'),4),'0') time_stamp,  sum(add_count) as add_count, max(total_count) as total_count FROM 5g_dashboard_module_traffic where time_stamp > DATE_ADD(NOW(), INTERVAL -300 MINUTE) and module_type="+module_type+" GROUP BY CONCAT(LEFT(DATE_FORMAT(time_stamp, '%H:%i'),4),'0') " +
+        " SELECT CONCAT(LEFT(DATE_FORMAT(time_stamp, '%H:%i'),4),'0') time_stamp,  sum(add_count) as add_count, max(total_count) as total_count FROM 5g_dashboard_module_traffic where time_stamp > DATE_ADD(NOW(), INTERVAL -300 MINUTE) and module_type=" + module_type + " GROUP BY CONCAT(LEFT(DATE_FORMAT(time_stamp, '%H:%i'),4),'0') " +
         ") DMT ON TT.time_stamp = DMT.time_stamp",
         query_builder
     )
@@ -679,13 +666,13 @@ router.get('/lora_list', async function (req, res, next) {
         response = await Request(options);
 
         var hits = response.hits.hits;
-        
-        for(var i = 0; i < hits.length; i++){
-            if(hits[i]._id >=60000 && 70000 > hits[i]._id){
-                lora_list.push (hits[i]);
+
+        for (var i = 0; i < hits.length; i++) {
+            if (hits[i]._id >= 60000 && 70000 > hits[i]._id) {
+                lora_list.push(hits[i]);
             }
         }
-        
+
     } catch (e) {
 
     }
@@ -762,7 +749,7 @@ router.get('/device_list', async function (req, res, next) {
         body.aggregations.get_tags.buckets.forEach(buckets => {
 
             var bike_id = buckets.desc_top.hits.hits[0]._source.device_id
-           
+
             if (bike_id >= 10000 && bike_id < 50000) { // lora 디바이스는 제외.
 
                 if (map.get(bike_id + "") != null) {
@@ -811,13 +798,16 @@ router.get('/device_list', async function (req, res, next) {
         res.json(bike_list);
     });
 
-
 });
 
 
 function getType(bike_id) {
     if (bike_id >= 10000 && bike_id < 30000) {
-        return TYPE_FIXED;
+        if (bike_id >= 20013 && bike_id <= 20015) {
+            return TYPE_MOVEMENT;
+        } else {
+            return TYPE_FIXED;
+        }
     } else {
         return TYPE_MOVEMENT;
     }
