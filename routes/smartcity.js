@@ -37,23 +37,9 @@ const DB_TYPE_ELASTICSEARCH = 2;
 
 
 // KBELL
-const pool = mysql.createPool({
-    host: '118.131.116.84',
-    port: 33306,
-    user: 'smartcity',
-    password: '*smartcity*',
-    database: 'smartcity',
-    waitForConnections: true,
-    connectionLimit: 100,
-    queueLimit: 0
-});
-const ELK_URL = "192.168.3.158:9200"
-const ELK_NODE_NAME = "Et8WQxJnTJWEL-gCMvUbgw"
-
-// DAEJON
 // const pool = mysql.createPool({
-//     host: '127.0.0.1',
-//     port: 3306,
+//     host: '118.131.116.84',
+//     port: 33306,
 //     user: 'smartcity',
 //     password: '*smartcity*',
 //     database: 'smartcity',
@@ -61,8 +47,22 @@ const ELK_NODE_NAME = "Et8WQxJnTJWEL-gCMvUbgw"
 //     connectionLimit: 100,
 //     queueLimit: 0
 // });
-// const ELK_URL = "10.20.1.137:9200"
-// const ELK_NODE_NAME = "EliRyr5_QVeXOcA45PGqeQ"
+// const ELK_URL = "192.168.3.158:9200"
+// const ELK_NODE_NAME = "Et8WQxJnTJWEL-gCMvUbgw"
+
+DAEJON
+const pool = mysql.createPool({
+    host: '127.0.0.1',
+    port: 3306,
+    user: 'smartcity',
+    password: '*smartcity*',
+    database: 'smartcity',
+    waitForConnections: true,
+    connectionLimit: 100,
+    queueLimit: 0
+});
+const ELK_URL = "10.20.1.137:9200"
+const ELK_NODE_NAME = "0otfDLfIRTK06RclyWCRGA"
 
 module.exports = router;
 pool.getConnection(function (err, con) {
